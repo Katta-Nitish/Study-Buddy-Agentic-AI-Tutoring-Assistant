@@ -38,7 +38,7 @@ ollama pull qwen3:4b
 1. **Clone the repository**
 
 ```bash
-git clone https://github.com/yourusername/study-buddy.git
+git clone https://github.com/Katta-Nitish/Study-Buddy-Agentic-AI-Tutoring-Assistant.git
 cd study-buddy
 ```
 

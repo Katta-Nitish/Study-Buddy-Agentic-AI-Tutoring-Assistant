@@ -42,11 +42,9 @@ file=st.file_uploader(
 )
 if user_key:
     # Use user provided key
-    from llama_index.llms.gemini import Gemini
     llm = GoogleGenAI(api_key=user_key, model_name="models/gemini-1.5-flash")
 elif "GEMINI_API_KEY" in st.secrets:
     # Use your secret key
-    from llama_index.llms.gemini import Gemini
     llm = GoogleGenAI(api_key=st.secrets["GEMINI_API_KEY"], model_name="models/gemini-1.5-flash")
 else:
     # Fallback to local Ollama for your Lenovo LOQ testing

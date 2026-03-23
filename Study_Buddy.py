@@ -14,10 +14,25 @@ from llama_index.core.node_parser import SentenceSplitter
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from llama_index.core.memory import ChatMemoryBuffer
+from llama_index.llms.google_genai import GoogleGenAI
+import nest_asyncio
+nest_asyncio.apply()
 
+col_l, col_r = st.columns([2, 4])
+with col_l:
+    try:
+        st.image("study_logo.png", width=200)
+    except:
+        st.write("📚")
 
-st.title("Study Buddy")
-st.write("Ask your study buddy anything related to your lessons and it will answer without any delay and the answers are only from your documents so dont worry about the out of box answers😉")
+with col_r:
+    st.title("Study Buddy")
+    st.caption("Ask your study buddy anything related to your lessons and it will answer without any delay and the answers are only from your documents so dont worry about the out of box answers😉")
+with st.sidebar:
+    st.title("📚 Study Buddy Settings")
+    user_key = st.text_input("Enter Google GenAI API Key (Optional)", type="password")
+    st.info("Get a key at [Google AI Studio](https://aistudio.google.com/)")
+    st.info("Note: Using a local embedding model: BGE-Small (No API cost for file reading)")
 
 file=st.file_uploader(
     "Upload your lesson document here (Note: only pdf,txt and docx type)",
@@ -25,7 +40,17 @@ file=st.file_uploader(
     help="Only PDF, TXT, and DOCX files are allowed",
     accept_multiple_files=True
 )
-llm=Ollama(model='qwen3:4b',request_timeout=150.0,context_window=8192)
+if user_key:
+    # Use user provided key
+    from llama_index.llms.gemini import Gemini
+    llm = GoogleGenAI(api_key=user_key, model_name="models/gemini-1.5-flash")
+elif "GEMINI_API_KEY" in st.secrets:
+    # Use your secret key
+    from llama_index.llms.gemini import Gemini
+    llm = GoogleGenAI(api_key=st.secrets["GEMINI_API_KEY"], model_name="models/gemini-1.5-flash")
+else:
+    # Fallback to local Ollama for your Lenovo LOQ testing
+    llm = Ollama(model='qwen3:4b', request_timeout=150.0)
 Settings.llm=llm
 
 @st.cache_resource
@@ -57,15 +82,15 @@ if file:
             vector_tool = QueryEngineTool(
                 query_engine=vector_query,
                 metadata=ToolMetadata(
-                    name="vector_tool",
-                    description="Use this tool to find specific facts or details from the uploaded lessons."
+                    name="lesson_lookup",
+                    description="Search for specific facts in the lesson documents."
                 )
             )
             summary_tool = QueryEngineTool(
                 query_engine=summary_query,
                 metadata=ToolMetadata(
-                    name="summary_tool",
-                    description="Use this tool to summarize the lessons or answer broad questions about the entire document."
+                    name="lesson_summary",
+                    description="Summarize the entire document or provide broad overviews."
                 )
             )
 
@@ -93,19 +118,27 @@ if file:
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
-    if prompt:=st.chat_input("user"):
+    if prompt := st.chat_input("user"):
         with st.chat_message("user"):
             st.markdown(prompt)
-        st.session_state.messages.append({"role":"user","content":prompt})
+        st.session_state.messages.append({"role": "user", "content": prompt})
+
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                async def answer():
-                    return await st.session_state.agent.run(prompt,memory=st.session_state.chat_memory)
                 try:
-                    loop=asyncio.get_running_loop()
-                except RuntimeError:
-                    loop=asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                response=loop.run_until_complete(answer())
-                st.write(str(response))
-        st.session_state.messages.append({"role":"assistant","content":str(response)})
+                # 1. Define a helper to run the async agent
+                    async def get_agent_response(user_input):
+                    # We pass the prompt to 'user_msg' as required by Workflow API
+                        return await st.session_state.agent.run(user_msg=user_input)
+
+                # 2. Use the existing loop safely thanks to nest_asyncio
+                    loop = asyncio.get_event_loop()
+                    response = loop.run_until_complete(get_agent_response(prompt))
+                
+                # 3. Handle the response
+                    full_response = str(response)
+                    st.markdown(full_response)
+                    st.session_state.messages.append({"role": "assistant", "content": full_response})
+                
+                except Exception as e:
+                    st.error(f"Agent Error: {e}")

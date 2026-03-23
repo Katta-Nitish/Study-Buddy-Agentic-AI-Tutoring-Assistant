@@ -1,0 +1,7 @@
+streamlit
+llama-index-core
+llama-index-llms-gemini
+llama-index-embeddings-huggingface
+llama-index-readers-file
+sentence-transformers
+llama-index-llms-ollama

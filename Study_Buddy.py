@@ -124,16 +124,8 @@ if file:
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
-                # 1. Define a helper to run the async agent
-                    async def get_agent_response(user_input):
-                    # We pass the prompt to 'user_msg' as required by Workflow API
-                        return await st.session_state.agent.run(user_msg=user_input)
-
-                # 2. Use the existing loop safely thanks to nest_asyncio
                     loop = asyncio.get_event_loop()
-                    response = loop.run_until_complete(get_agent_response(prompt))
-                
-                # 3. Handle the response
+                    response = loop.run_until_complete(st.session_state.agent.run(user_msg=prompt))
                     full_response = str(response)
                     st.markdown(full_response)
                     st.session_state.messages.append({"role": "assistant", "content": full_response})

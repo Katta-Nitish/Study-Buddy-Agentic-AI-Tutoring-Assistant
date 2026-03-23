@@ -9,25 +9,25 @@
 - **Context-Aware Responses**: All answers are grounded in your uploaded documents
 - **Chat Memory**: Maintains conversation history for seamless multi-turn interactions
 - **Expert Persona**: Acts as a rigorous Computer Science professor
-- **Real-time Processing**: Instant responses with streaming capabilities
+- **Flexible LLM Backend**: Supports Google Gemini (cloud) or local Ollama as fallback
 
 ## 📋 Prerequisites
 
 Before you begin, ensure you have the following installed:
 
 - Python 3.8 or higher
-- [Ollama](https://ollama.ai/) (for running local LLMs)
 - pip (Python package manager)
+- A [Google AI Studio](https://aistudio.google.com/) API key *(recommended)* **OR** [Ollama](https://ollama.ai/) for local inference
 
 ### System Requirements
 
-- **RAM**: 4GB minimum (8GB recommended)
-- **Storage**: 5GB+ for model files
-- **GPU**: Optional (CPU works fine with Qwen3:4b)
+- **RAM**: 4GB minimum (8GB recommended for local Ollama)
+- **Storage**: 500MB for cloud setup; 5GB+ if using Ollama locally
+- **GPU**: Not required when using Google Gemini (cloud)
 
-### Required Models
+### Required Models (Ollama fallback only)
 
-Make sure you have the following models pulled in Ollama:
+If you plan to use Ollama as a fallback, pull the required model:
 
 ```bash
 ollama pull qwen3:4b
@@ -61,195 +61,97 @@ The project uses the following key libraries:
 
 - **streamlit** - Web UI framework
 - **llama-index** - Vector store and RAG framework
-- **ollama** - Local LLM inference
-- **huggingface-hub** - Embedding models
+- **llama-index-llms-google-genai** - Google Gemini integration
+- **llama-index-llms-ollama** - Local Ollama fallback
+- **huggingface-hub** - Local embedding model
 
 See `requirements.txt` for the complete list.
 
 ## ⚙️ Configuration
 
-### Option 1: Local Setup (Ollama)
+### LLM Selection (Priority Order)
 
-#### Ollama Setup
+Study Buddy automatically selects an LLM in the following order:
 
-Ensure Ollama is running locally on `localhost:11434`:
+| Priority | Source | How |
+|----------|--------|-----|
+| 1st | User-entered key in sidebar | Enter key at runtime — no setup needed |
+| 2nd | `st.secrets["GEMINI_API_KEY"]` | Set in `.streamlit/secrets.toml` for deployment |
+| 3rd | Local Ollama (fallback) | Runs `qwen3:4b` if no key is available |
+
+---
+
+### Option 1: Google Gemini (Recommended)
+
+#### Step 1: Get a Google GenAI API Key
+
+1. Visit [Google AI Studio](https://aistudio.google.com/)
+2. Sign in with your Google account
+3. Click **Get API Key** → **Create API Key**
+4. Copy and save the key securely
+
+#### Step 2: Run and Enter Key in Sidebar
+
+Start the app and paste your key directly into the sidebar input at runtime:
+
+```bash
+streamlit run Study_Buddy.py
+```
+
+No `.env` or secrets file needed for quick local use.
+
+#### Step 3 (Optional): Set a Persistent Key via Streamlit Secrets
+
+For deployment or to avoid re-entering the key every session, create `.streamlit/secrets.toml`:
+
+```toml
+GEMINI_API_KEY = "your-api-key-here"
+```
+
+The app will automatically pick this up as the second priority.
+
+---
+
+### Option 2: Local Ollama (Fallback / Offline)
+
+If no API key is provided, Study Buddy falls back to a local Ollama model. Ensure Ollama is running:
 
 ```bash
 ollama serve
 ```
 
-#### Environment Variables
-
-The application disables Streamlit telemetry by default:
-
-```python
-os.environ["STREAMLIT_GATHER_USAGE_STATS"] = "false"
-```
-
----
-
-### Option 2: OpenAI API (Recommended for Cloud/No Local GPU)
-
-If you don't have a local LLM setup or prefer using cloud services, follow these steps:
-
-#### Step 1: Get OpenAI API Key
-
-1. Visit [OpenAI Platform](https://platform.openai.com/)
-2. Sign up or log in to your account
-3. Go to **API Keys** section in your account settings
-4. Click **Create new secret key**
-5. Copy and save the key securely
-
-#### Step 2: Modify `Study_Buddy.py`
-
-Replace the LLM initialization section:
-
-**Original (Ollama):**
-```python
-llm=Ollama(model='deepseek-r1:8b',request_timeout=150.0)
-Settings.llm=llm
-```
-
-**New (OpenAI):**
-```python
-from llama_index.llms.openai import OpenAI
-import os
-
-# Set your OpenAI API key
-os.environ["OPENAI_API_KEY"] = "your-api-key-here"
-
-llm = OpenAI(
-    model="gpt-4-turbo",  # or "gpt-3.5-turbo" for faster/cheaper responses
-    api_key=os.environ["OPENAI_API_KEY"],
-    temperature=0.7
-)
-Settings.llm = llm
-```
-
-#### Step 3: Use Online Embedding Model
-
-Replace the embedding model section:
-
-**Original (Local HuggingFace):**
-```python
-@st.cache_resource
-def load_embedding_model():
-    return HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
-
-Settings.embed_model=load_embedding_model()
-```
-
-**New (OpenAI Embeddings):**
-```python
-from llama_index.embeddings.openai import OpenAIEmbedding
-
-@st.cache_resource
-def load_embedding_model():
-    return OpenAIEmbedding(
-        model="text-embedding-3-small",  # Fast and cost-effective
-        api_key=os.environ["OPENAI_API_KEY"]
-    )
-
-Settings.embed_model = load_embedding_model()
-```
-
-#### Step 4: Set Environment Variable
-
-Create a `.env` file in your project root:
-
-```env
-OPENAI_API_KEY=sk-your-actual-api-key-here
-```
-
-Then load it at the top of `Study_Buddy.py`:
-
-```python
-from dotenv import load_dotenv
-
-load_dotenv()  # Load environment variables from .env file
-```
-
-#### Step 5: Update Requirements
-
-Add OpenAI dependencies to `requirements.txt`:
-
-```
-streamlit
-llama-index
-llama-index-llms-openai
-llama-index-embeddings-openai
-python-dotenv
-```
-
-Install the new packages:
+The default local model is `qwen3:4b`. Pull it if not already available:
 
 ```bash
-pip install -r requirements.txt
+ollama pull qwen3:4b
 ```
 
 ---
 
-### Option 3: Hybrid Setup (Local LLM + OpenAI Embeddings)
+### Embedding Model
 
-If you want to use local Ollama for LLM but online embeddings for better quality:
+Study Buddy always uses a **local HuggingFace embedding model** — no API cost for document reading:
 
-```python
-from llama_index.llms.ollama import Ollama
-from llama_index.embeddings.openai import OpenAIEmbedding
-import os
-
-# Local LLM
-llm = Ollama(model='deepseek-r1:8b', request_timeout=150.0)
-Settings.llm = llm
-
-# OpenAI Embeddings
-@st.cache_resource
-def load_embedding_model():
-    return OpenAIEmbedding(
-        model="text-embedding-3-small",
-        api_key=os.environ["OPENAI_API_KEY"]
-    )
-
-Settings.embed_model = load_embedding_model()
-```
+- **Model**: `BAAI/bge-small-en-v1.5`
+- **Type**: Sentence-BERT
+- **Dimensions**: 384
+- **Cost**: Free (runs locally)
 
 ---
 
-### Model Comparison
+### Setup Comparison
 
-| Aspect | Local (Ollama) | OpenAI API | Hybrid |
-|--------|---|---|---|
-| **Cost** | Free (local compute) | Pay per token | Low (embeddings only) |
-| **Speed** | Depends on GPU | Fast (cloud) | Fast |
-| **Privacy** | 100% local | Data sent to OpenAI | Mostly local |
-| **Setup** | Requires GPU | API key only | Both setups |
-| **Quality** | Good | Excellent | Excellent |
-| **Offline** | ✅ | ❌ | Partial |
-
----
-
-### OpenAI Model Options
-
-#### LLM Models
-
-- **`gpt-4-turbo`** - Best quality, slower, most expensive ($0.01-0.03 per 1K tokens)
-- **`gpt-3.5-turbo`** - Fast, cheap, good enough ($0.0005-0.0015 per 1K tokens)
-- **`gpt-4o`** - Balanced performance and cost ($0.005-0.015 per 1K tokens)
-
-#### Embedding Models
-
-- **`text-embedding-3-small`** - Fast, 1,536 dimensions, cheap ($0.02 per 1M tokens)
-- **`text-embedding-3-large`** - More accurate, 3,072 dimensions ($0.13 per 1M tokens)
+| Aspect | Google Gemini | Local Ollama |
+|--------|--------------|--------------|
+| **Cost** | Free tier available | Free (local compute) |
+| **Speed** | Fast (cloud) | Depends on hardware |
+| **Privacy** | Data sent to Google | 100% local |
+| **Setup** | API key only | Requires Ollama install |
+| **Quality** | Excellent | Good |
+| **Offline** | ❌ | ✅ |
+| **GPU needed** | ❌ | Optional |
 
 ---
-
-### Environment Variables
-
-The application disables Streamlit telemetry by default:
-
-```python
-os.environ["STREAMLIT_GATHER_USAGE_STATS"] = "false"
-```
 
 ## 💻 Usage
 
@@ -259,12 +161,16 @@ os.environ["STREAMLIT_GATHER_USAGE_STATS"] = "false"
 streamlit run Study_Buddy.py
 ```
 
-2. **Upload your documents**
-   - Click on the file uploader in the sidebar
+2. **Enter your API key** *(optional)*
+   - Paste your Google GenAI key in the sidebar input for cloud inference
+   - Leave blank to use Ollama locally
+
+3. **Upload your documents**
+   - Click on the file uploader
    - Select one or multiple lesson documents (PDF, TXT, or DOCX)
    - Wait for processing to complete
 
-3. **Ask questions**
+4. **Ask questions**
    - Type your question in the chat input
    - Study Buddy will search and summarize your documents
    - Get detailed, concept-focused answers
@@ -285,7 +191,7 @@ streamlit run Study_Buddy.py
            ↓
 ┌──────────────────────────────────┐
 │  Text Chunking & Embedding       │
-│  (SentenceSplitter + HuggingFace)│
+│  (SentenceSplitter + BGE-Small)  │
 └──────────┬───────────────────────┘
            ↓
 ┌──────────────────────────────────┐
@@ -301,49 +207,41 @@ streamlit run Study_Buddy.py
 └──────────┬───────────────────────┘
            ↓
 ┌──────────────────────────────────┐
-│  LLM Response (Qwen3:4b)         │
+│  LLM Response                    │
+│  (Gemini 1.5 Flash / Qwen3:4b)   │
 └──────────────────────────────────┘
 ```
 
 ### Key Components
 
-1. **Vector Store Index**: Efficiently retrieves specific facts and details from documents using semantic similarity (top-5 results)
+1. **Vector Store Index**: Retrieves specific facts and details using semantic similarity (top-5 results)
 
-2. **Summary Index**: Provides high-level overviews and answers broad questions about the entire document using tree-summarize approach
+2. **Summary Index**: Provides high-level overviews and answers broad questions using the tree-summarize approach
 
-3. **FunctionAgent**: Advanced agent architecture that intelligently selects and uses the appropriate tools (vector or summary) based on query type, with improved performance and efficiency
+3. **FunctionAgent**: Intelligently selects between vector or summary tools based on query type, with efficient tool execution
 
-4. **Chat Memory**: Maintains conversation context (4000 token limit) for coherent multi-turn discussions, with proper session state management
+4. **Chat Memory**: Maintains conversation context (4000 token limit) for coherent multi-turn discussions
 
-## 🏗️ Architecture Improvements (v2.0)
+## 🏗️ Architecture Notes
 
-### Key Enhancements
+### Key Design Decisions
 
-1. **FunctionAgent Architecture**: Replaced ReActAgent with FunctionAgent for improved tool selection and execution efficiency
+1. **Google Gemini as Primary LLM**: `gemini-1.5-flash` offers fast, high-quality responses with a generous free tier — ideal for most users without a local GPU.
 
-2. **Optimized Model Selection**: Switched from DeepSeek-R1:8b to **Qwen3:4b** for:
-   - ⚡ **Faster Response Times**: 50-70% faster inference
-   - 💾 **Lower Memory**: ~2GB vs ~4GB (DeepSeek)
-   - 💻 **CPU-Friendly**: Efficient on CPU without GPU
-   - ✅ **Maintained Quality**: Comparable accuracy with better efficiency
-   - 🚀 **Lightweight**: Perfect for resource-constrained environments
+2. **Runtime API Key Input**: Users can paste their Google GenAI key directly in the sidebar without any file setup, making sharing and deployment frictionless.
 
-3. **Enhanced Session Management**: 
-   - Proper async loop handling with try-except blocks
-   - Session state persistence for agent and memory
-   - Prevents reinitialization on page reruns
-   - Smoother user experience across interactions
+3. **Local Ollama Fallback**: If no API key is available, the app gracefully falls back to `qwen3:4b` via Ollama for a fully offline, private experience.
 
-4. **Improved Memory Management**:
-   - Optimized token limit (4000 tokens) for stability
-   - Better context preservation across conversation turns
-   - Efficient memory cleanup and reuse
+4. **Local Embeddings Always**: The `BAAI/bge-small-en-v1.5` embedding model always runs locally — no API cost or data leakage for document indexing.
 
-5. **Better User Experience**:
-   - Clear spinner messages ("Reading your documents and waking up Study Buddy...")
-   - Separate initialization phase from chat interaction
-   - Agent loads once per session, then reused
-   - Faster subsequent interactions
+5. **FunctionAgent Architecture**: Replaced ReActAgent with FunctionAgent for improved tool selection efficiency and cleaner async execution.
+
+6. **Session State Persistence**:
+   - Agent and memory are initialized once per session
+   - Survives Streamlit reruns without reprocessing documents
+   - Smoother experience across interactions
+
+7. **Optimized Memory**: 4000-token chat memory buffer for context preservation without instability.
 
 ---
 
@@ -373,77 +271,84 @@ According to your lesson, they have the following characteristics:
 
 ## 🔧 Technical Details
 
-### Embedding Model
-
-- **Model**: BAAI/bge-small-en-v1.5
-- **Type**: Sentence-BERT embeddings
-- **Dimension**: 384
-- **Purpose**: Converting text to semantic vectors for similarity search
-
 ### LLM Configuration
 
-- **Model**: Qwen3:4b (Lightweight & Fast)
-- **Request Timeout**: 150 seconds
-- **Context Window**: 8192 tokens
-- **Type**: Open-source fast inference model
-- **Memory Limit**: 4000 tokens
+| Setting | Value |
+|---------|-------|
+| Primary Model | `gemini-1.5-flash` (Google GenAI) |
+| Fallback Model | `qwen3:4b` (Ollama local) |
+| Memory Limit | 4000 tokens |
+| Request Timeout (Ollama) | 150 seconds |
+
+### Embedding Model
+
+| Setting | Value |
+|---------|-------|
+| Model | `BAAI/bge-small-en-v1.5` |
+| Type | Sentence-BERT |
+| Dimensions | 384 |
+| Runs | Locally (no API cost) |
 
 ### Document Processing
 
-- **Chunk Size**: 1024 tokens
-- **Splitter**: SentenceSplitter (preserves sentence boundaries)
-- **Supported Formats**: PDF, TXT, DOCX
+| Setting | Value |
+|---------|-------|
+| Chunk Size | 1024 tokens |
+| Splitter | SentenceSplitter |
+| Supported Formats | PDF, TXT, DOCX |
+| Vector Top-K | 5 |
 
 ## 📊 Performance Considerations
 
-- **First Load**: Initial embedding generation and model loading may take 1-2 minutes (cached in session)
-- **Memory Usage**: ~2GB for Qwen3:4b + embeddings (lightweight compared to larger models)
-- **Speed**: Qwen3:4b optimized for fast inference even on CPU
-- **GPU Support**: Optional (works efficiently on CPU)
-- **Scalability**: Suitable for documents up to several hundred pages
+- **First Load**: Embedding model download and document indexing may take 1-2 minutes (cached in session)
+- **Gemini**: Fast cloud inference, minimal local resource usage
+- **Ollama Fallback**: ~2GB RAM for Qwen3:4b; works on CPU without GPU
 - **Session Persistence**: Agent and memory survive Streamlit reruns for seamless interactions
+- **Scalability**: Suitable for documents up to several hundred pages
 
 ### Optimization Tips
 
-- **First time setup**: Takes longer as model is loaded
-- **Subsequent chats**: Much faster due to caching
-- **Large documents**: Consider splitting into 20-30 page chunks for optimal performance
-- **Memory reuse**: Chat memory maintained at 4000 tokens for context preservation
+- Use your Google GenAI key for the fastest experience
+- For large documents, split into 20-30 page chunks for optimal performance
+- Subsequent chats are much faster due to caching after the first load
 
 ## 🐛 Troubleshooting
 
-### Issue: "Connection refused" for Ollama
+### Issue: "Connection refused" (Ollama fallback)
 **Solution**: Ensure Ollama is running:
 ```bash
 ollama serve
 ```
 
-### Issue: Model not found
-**Solution**: Pull the required models:
+### Issue: Gemini model not responding
+**Solution**: Verify your API key is valid at [Google AI Studio](https://aistudio.google.com/). Ensure you have quota remaining on your free tier.
+
+### Issue: Model not found (Ollama)
+**Solution**: Pull the required model:
 ```bash
 ollama pull qwen3:4b
 ```
 
 ### Issue: Slow responses
-**Solution**: 
-- Qwen3:4b is optimized for speed - if still slow, check GPU availability
-- Reduce document size or chunk overlap
-- Increase the request timeout if needed
+**Solution**:
+- Switch to Google Gemini (enter your API key in the sidebar)
+- If using Ollama, check available RAM — Qwen3:4b needs ~2GB free
 
-### Issue: Out of memory
+### Issue: Out of memory (Ollama)
 **Solution**:
 - Close other applications
-- Qwen3:4b is lightweight; if still running out of memory, ensure sufficient RAM (4GB minimum)
-- Split documents into smaller parts
+- Alternatively, switch to Google Gemini to avoid local memory usage entirely
 
 ## 📚 Project Structure
 
 ```
 study-buddy/
-├── Study_Buddy.py      # Main application file
-├── requirements.txt    # Python dependencies
-├── README.md          # This file
-└── .gitignore         # Git ignore file
+├── Study_Buddy.py          # Main application file
+├── requirements.txt        # Python dependencies
+├── README.md               # This file
+├── .streamlit/
+│   └── secrets.toml        # Optional: persistent Gemini API key
+└── .gitignore              # Git ignore file
 ```
 
 ## 🎓 Educational Context
@@ -455,20 +360,25 @@ This project was designed for students to enhance learning through:
 - Interactive Q&A sessions
 - Document-grounded knowledge base
 
-
 ## ❓ FAQ
 
-**Q: Can I use my own LLM?**
-A: Yes! Modify the LLM initialization in the code to use any OpenAI-compatible API or other Ollama models.
+**Q: Do I need a GPU?**
+A: Not when using Google Gemini. For local Ollama fallback, a GPU is optional — Qwen3:4b runs fine on CPU.
+
+**Q: Is there a cost to use this?**
+A: Google Gemini has a free tier that is sufficient for most student use. The embedding model always runs locally for free. Ollama is also fully free.
+
+**Q: Can I use a different Gemini model?**
+A: Yes! Modify the `model_name` in the `GoogleGenAI(...)` call in `Study_Buddy.py`. See [Google AI Studio](https://aistudio.google.com/) for available models.
 
 **Q: Is there a limit on document size?**
-A: No hard limit, but processing time increases with document size. Test with your specific documents.
+A: No hard limit, but processing time increases with document size. For best performance, keep documents under 30 pages per upload.
 
 **Q: Can answers go beyond my documents?**
-A: No, the system prompt explicitly restricts responses to document content only.
+A: No — the system prompt explicitly restricts all responses to uploaded document content only.
 
-**Q: How is privacy maintained?**
-A: All processing happens locally on your machine. No data is sent to external servers.
+**Q: How is my data handled?**
+A: Document embedding always happens locally. If using Google Gemini, query text is sent to Google's API. If using Ollama, everything stays on your machine.
 
 ## 📧 Support
 

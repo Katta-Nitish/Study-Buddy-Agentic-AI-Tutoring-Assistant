@@ -182,7 +182,7 @@ if uploaded_files:
 
         # Combine history with the new questio
         # Combine history with the new question
-        contextualized_prompt = f"{chat_context}Current Student Question: {prompt}\n\n(Note: Use history for context, but answer the Current Student Question ONLY in English.)"
+        contextualized_prompt = f"{chat_context}Current Student Question: {prompt}\n\n(Note: Use history for context,The student may ask follow up questions if you see any answer based on the previous question, but answer the Current Student Question ONLY in English.)"
         # -----------------------
 
         # Save the clean prompt to the UI history

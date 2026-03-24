@@ -34,7 +34,6 @@ with st.sidebar:
     user_key = st.text_input("Enter Gemini API Key (Optional)", type="password")
     st.info("Using a local embedding model: BGE-Small (No API cost for file reading)")
 
-# --- EMBEDDING MODEL (cached so it loads only once) ---
 @st.cache_resource
 def load_embedding_model():
     return HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
@@ -42,7 +41,6 @@ def load_embedding_model():
 Settings.embed_model = load_embedding_model()
 
 # --- LLM SELECTION ---
-# Re-evaluated each run so key changes take effect immediately
 if user_key:
     llm = GoogleGenAI(api_key=user_key, model_name="models/gemini-1.5-flash")
 elif "GEMINI_API_KEY" in st.secrets:
@@ -60,7 +58,6 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True
 )
 
-# --- BUILD INDEX (cached by file names+sizes so it only rebuilds when files change) ---
 @st.cache_resource(show_spinner="Reading your documents...")
 def build_index(file_key: str, file_contents: list[bytes], file_names: list[str]):
     """
@@ -82,7 +79,6 @@ def build_index(file_key: str, file_contents: list[bytes], file_names: list[str]
     summary_index = SummaryIndex(nodes)
     return vector_index, summary_index
 
-# --- BUILD AGENT (cached so memory persists across reruns) ---
 @st.cache_resource(show_spinner="Setting up your Study Buddy...")
 def build_agent(_vector_index, _summary_index, file_key: str):
     """
@@ -145,7 +141,6 @@ RULES:
 
 # --- MAIN CHAT LOGIC ---
 if uploaded_files:
-    # Build a stable cache key from file names + sizes
     file_key = "_".join(f"{f.name}-{len(f.getvalue())}" for f in uploaded_files)
     file_contents = [f.getvalue() for f in uploaded_files]
     file_names = [f.name for f in uploaded_files]
@@ -153,7 +148,6 @@ if uploaded_files:
     vector_index, summary_index = build_index(file_key, file_contents, file_names)
     agent = build_agent(vector_index, summary_index, file_key)
 
-    # Reset chat display history when files change
     if st.session_state.get("current_file_key") != file_key:
         st.session_state.messages = []
         st.session_state.current_file_key = file_key
@@ -174,11 +168,7 @@ if uploaded_files:
 
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                # Fix: use asyncio.run safely (nest_asyncio applied at top)
-                async def get_answer(user_input):
-                    return await agent.run(user_msg=user_input)
-
-                response = asyncio.run(get_answer(prompt))
+                response = agent.chat(prompt)
                 response_text = str(response)
                 st.markdown(response_text)
 

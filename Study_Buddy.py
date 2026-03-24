@@ -2,7 +2,7 @@ import streamlit as st
 import os
 os.environ["STREAMLIT_GATHER_USAGE_STATS"] = "false"
 import nest_asyncio
-nest_asyncio.apply()  # Fix: prevents asyncio event loop conflicts in Streamlit
+nest_asyncio.apply()  
 import asyncio
 import tempfile
 from llama_index.llms.ollama import Ollama
@@ -79,17 +79,16 @@ def build_index(file_key: str, file_contents: list[bytes], file_names: list[str]
     summary_index = SummaryIndex(nodes)
     return vector_index, summary_index
 
-@st.cache_resource(show_spinner="Setting up your Study Buddy...")
-def build_agent(_vector_index, _summary_index, file_key: str):
+# --- BUILD AGENT (No longer cached!) ---
+def build_agent(vector_index, summary_index, file_key: str):
     """
-    Builds and caches the ReActAgent with its own persistent memory.
-    The leading underscore on index args tells Streamlit not to hash them.
-    Keyed by file_key so agent+memory reset when new files are uploaded.
+    Builds the ReActAgent. Not cached to avoid asyncio loop conflicts.
+    Memory is persisted via Streamlit session_state instead.
     """
-    vector_query = _vector_index.as_query_engine(similarity_top_k=5)
-    summary_query = _summary_index.as_query_engine(
+    vector_query = vector_index.as_query_engine(similarity_top_k=5)
+    summary_query = summary_index.as_query_engine(
         response_mode="tree_summarize",
-        use_async=True
+        use_async=False  # Safety check for Streamlit threading
     )
 
     vector_tool = QueryEngineTool(
@@ -128,11 +127,13 @@ RULES:
    to stay focused on the syllabus.
 5. Maintain a formal, academic, yet encouraging tone throughout."""
 
-    memory = ChatMemoryBuffer.from_defaults(token_limit=4096)
+    # Keep memory in session state so it survives reruns
+    if "agent_memory" not in st.session_state:
+        st.session_state.agent_memory = ChatMemoryBuffer.from_defaults(token_limit=4096)
 
     agent = ReActAgent(
         tools=[vector_tool, summary_tool],
-        memory=memory,
+        memory=st.session_state.agent_memory,
         system_prompt=system_prompt,
         verbose=True
     )
@@ -141,16 +142,21 @@ RULES:
 
 # --- MAIN CHAT LOGIC ---
 if uploaded_files:
+    # Build a stable cache key from file names + sizes
     file_key = "_".join(f"{f.name}-{len(f.getvalue())}" for f in uploaded_files)
     file_contents = [f.getvalue() for f in uploaded_files]
     file_names = [f.name for f in uploaded_files]
 
     vector_index, summary_index = build_index(file_key, file_contents, file_names)
-    agent = build_agent(vector_index, summary_index, file_key)
-
+    
+    # Reset chat and memory when files change
     if st.session_state.get("current_file_key") != file_key:
         st.session_state.messages = []
         st.session_state.current_file_key = file_key
+        st.session_state.agent_memory = ChatMemoryBuffer.from_defaults(token_limit=4096)
+
+    # Agent is rebuilt cleanly on the current thread's event loop
+    agent = build_agent(vector_index, summary_index, file_key)
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -168,7 +174,10 @@ if uploaded_files:
 
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                response = agent.chat(prompt)
+                # Use the existing loop safely to run the workflow
+                loop = asyncio.get_event_loop()
+                response = loop.run_until_complete(agent.run(user_msg=prompt))
+                
                 response_text = str(response)
                 st.markdown(response_text)
 

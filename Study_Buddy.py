@@ -192,10 +192,14 @@ if uploaded_files:
             with st.spinner("Thinking..."):
                 
                 async def generate_response():
-                    agent = build_agent(vector_index, summary_index, file_key)
-                    # Feed the contextualized prompt to the agent instead of the raw prompt
-                    return await agent.run(user_msg=contextualized_prompt)
-                
+                    try:
+                        agent = build_agent(vector_index, summary_index, file_key)
+                        return await agent.run(user_msg=contextualized_prompt)
+                    except Exception as e:
+                        if "429" in str(e):
+                            return "⏳ **Whoops! I'm thinking a little too fast.** The Google Gemini API has reached its free-tier rate limit (too many requests in one minute). Please wait about 60 seconds and try asking your question again!"
+                        else:
+                            return f"⚠️ **An unexpected error occurred:** {str(e)}"
                 response = asyncio.run(generate_response())
                 
                 response_text = str(response)

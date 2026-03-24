@@ -2,14 +2,25 @@
 
 > An AI-powered study companion that answers your questions based on your lesson documents using advanced RAG (Retrieval Augmented Generation) techniques.
 
+## 🌐 Live Demo
+
+**Try it now:** [https://study-buddy-nitish.streamlit.app/](https://study-buddy-nitish.streamlit.app/)
+
+No installation needed — just bring your Google Gemini API key and a lesson document!
+
+---
+
 ## 🌟 Features
 
 - **Document Upload**: Support for PDF, TXT, and DOCX files
 - **Intelligent RAG System**: Combines vector search and summarization for accurate answers
 - **Context-Aware Responses**: All answers are grounded in your uploaded documents
+- **RAG Amnesia Fix**: Conversation history is injected into each query so follow-up questions resolve correctly (e.g. *"what happens next?"* understands what came before)
 - **Chat Memory**: Maintains conversation history for seamless multi-turn interactions
-- **Expert Persona**: Acts as a rigorous Computer Science professor
+- **Expert Persona**: Acts as a rigorous academic professor
+- **Language Lock**: Always responds in English regardless of the underlying model
 - **Flexible LLM Backend**: Supports Google Gemini (cloud) or local Ollama as fallback
+- **Smart Cache**: Document index rebuilds only when files change — fast reruns in the same session
 
 ## 📋 Prerequisites
 
@@ -23,7 +34,7 @@ Before you begin, ensure you have the following installed:
 
 - **RAM**: 4GB minimum (8GB recommended for local Ollama)
 - **Storage**: 500MB for cloud setup; 5GB+ if using Ollama locally
-- **GPU**: Not required when using Google Gemini (cloud)
+- **GPU**: Not required when using Google Gemini
 
 ### Required Models (Ollama fallback only)
 
@@ -59,11 +70,11 @@ pip install -r requirements.txt
 
 The project uses the following key libraries:
 
-- **streamlit** - Web UI framework
-- **llama-index** - Vector store and RAG framework
-- **llama-index-llms-google-genai** - Google Gemini integration
-- **llama-index-llms-ollama** - Local Ollama fallback
-- **huggingface-hub** - Local embedding model
+- **streamlit** — Web UI framework
+- **llama-index** — Vector store and RAG framework
+- **llama-index-llms-google-genai** — Google Gemini integration
+- **llama-index-llms-ollama** — Local Ollama fallback
+- **huggingface-hub** — Local embedding model
 
 See `requirements.txt` for the complete list.
 
@@ -75,7 +86,7 @@ Study Buddy automatically selects an LLM in the following order:
 
 | Priority | Source | How |
 |----------|--------|-----|
-| 1st | User-entered key in sidebar | Enter key at runtime — no setup needed |
+| 1st | User-entered key in sidebar | Paste key at runtime — no setup needed |
 | 2nd | `st.secrets["GEMINI_API_KEY"]` | Set in `.streamlit/secrets.toml` for deployment |
 | 3rd | Local Ollama (fallback) | Runs `qwen3:4b` if no key is available |
 
@@ -162,18 +173,18 @@ streamlit run Study_Buddy.py
 ```
 
 2. **Enter your API key** *(optional)*
-   - Paste your Google GenAI key in the sidebar input for cloud inference
+   - Paste your Google Gemini key in the sidebar for cloud inference
    - Leave blank to use Ollama locally
 
 3. **Upload your documents**
    - Click on the file uploader
    - Select one or multiple lesson documents (PDF, TXT, or DOCX)
-   - Wait for processing to complete
+   - The index builds once and is cached — reruns are instant
 
 4. **Ask questions**
    - Type your question in the chat input
-   - Study Buddy will search and summarize your documents
-   - Get detailed, concept-focused answers
+   - Follow-up questions work correctly thanks to the RAG Amnesia Fix
+   - All answers are sourced strictly from your uploaded documents
 
 ## 🛠️ How It Works
 
@@ -184,10 +195,11 @@ streamlit run Study_Buddy.py
 │   Upload Documents  │
 └──────────┬──────────┘
            ↓
-┌─────────────────────────┐
-│  Document Processing    │
-│  (PDF/TXT/DOCX Parser)  │
-└──────────┬──────────────┘
+┌──────────────────────────────────┐
+│  Document Processing             │
+│  (PDF/TXT/DOCX Parser)           │
+│  Cached by file name + size key  │
+└──────────┬───────────────────────┘
            ↓
 ┌──────────────────────────────────┐
 │  Text Chunking & Embedding       │
@@ -201,9 +213,15 @@ streamlit run Study_Buddy.py
 └──────────┬───────────────────────┘
            ↓
 ┌──────────────────────────────────┐
-│  FunctionAgent with Tools        │
-│  ├─ Vector Tool (Facts)          │
-│  └─ Summary Tool (Concepts)      │
+│  RAG Amnesia Fix                 │
+│  (Last 4 messages injected into  │
+│   the prompt for context)        │
+└──────────┬───────────────────────┘
+           ↓
+┌──────────────────────────────────┐
+│  ReActAgent with Tools           │
+│  ├─ vector_tool (Facts)          │
+│  └─ summary_tool (Overviews)     │
 └──────────┬───────────────────────┘
            ↓
 ┌──────────────────────────────────┐
@@ -216,11 +234,13 @@ streamlit run Study_Buddy.py
 
 1. **Vector Store Index**: Retrieves specific facts and details using semantic similarity (top-5 results)
 
-2. **Summary Index**: Provides high-level overviews and answers broad questions using the tree-summarize approach
+2. **Summary Index**: Provides high-level overviews of the entire document using the tree-summarize approach; runs in sync mode (`use_async=False`) for Streamlit thread safety
 
-3. **FunctionAgent**: Intelligently selects between vector or summary tools based on query type, with efficient tool execution
+3. **ReActAgent**: Reasons step-by-step and selects between the vector tool (specific questions) or summary tool (broad overviews) based on query type
 
-4. **Chat Memory**: Maintains conversation context (4000 token limit) for coherent multi-turn discussions
+4. **RAG Amnesia Fix**: The last 4 messages from the Streamlit chat history are prepended to every new prompt so the agent can resolve follow-up questions and pronouns correctly — even when the underlying LLM has no persistent memory
+
+5. **File Change Detection**: A cache key derived from file names and sizes triggers a full reset of the chat history and memory buffer when new files are uploaded
 
 ## 🏗️ Architecture Notes
 
@@ -228,45 +248,51 @@ streamlit run Study_Buddy.py
 
 1. **Google Gemini as Primary LLM**: `gemini-1.5-flash` offers fast, high-quality responses with a generous free tier — ideal for most users without a local GPU.
 
-2. **Runtime API Key Input**: Users can paste their Google GenAI key directly in the sidebar without any file setup, making sharing and deployment frictionless.
+2. **ReActAgent**: Uses step-by-step reasoning to decide which tool to call, making it more reliable for multi-hop and follow-up queries than a function-calling approach.
 
-3. **Local Ollama Fallback**: If no API key is available, the app gracefully falls back to `qwen3:4b` via Ollama for a fully offline, private experience.
+3. **Decoupled Index and Agent**: `build_index` is `@st.cache_resource` (rebuilds only when files change), while `build_agent` is intentionally *not* cached — this avoids asyncio event loop conflicts that arise when caching async objects across Streamlit reruns.
 
-4. **Local Embeddings Always**: The `BAAI/bge-small-en-v1.5` embedding model always runs locally — no API cost or data leakage for document indexing.
+4. **Memory via Session State**: `ChatMemoryBuffer` is stored in `st.session_state` rather than inside the cached agent, so it persists across reruns without requiring the agent to be re-cached.
 
-5. **FunctionAgent Architecture**: Replaced ReActAgent with FunctionAgent for improved tool selection efficiency and cleaner async execution.
+5. **RAG Amnesia Fix**: Rather than relying solely on the memory buffer (which can be truncated), the last 4 conversation turns are explicitly injected into the prompt. This ensures follow-ups like *"explain the second point further"* are resolved with the correct context.
 
-6. **Session State Persistence**:
-   - Agent and memory are initialized once per session
-   - Survives Streamlit reruns without reprocessing documents
-   - Smoother experience across interactions
+6. **Language Lock**: The system prompt explicitly instructs the model to always respond in English, preventing multilingual models (like Qwen) from switching languages mid-conversation.
 
-7. **Optimized Memory**: 4000-token chat memory buffer for context preservation without instability.
+7. **Local Embeddings Always**: The `BAAI/bge-small-en-v1.5` embedding model always runs locally — no API cost or data leakage for document indexing.
 
 ---
 
-## 🎯 System Prompt
+## 🎯 System Prompt Design
 
-The agent operates with a specialized system prompt that:
+The agent is instructed to:
 
-- Restricts answers to document content only
-- Encourages concept explanation over simple answers
-- Maintains a formal, academic tone
-- Redirects off-topic questions back to the syllabus
-- Always uses tools to find answers before responding
+- Always call `vector_tool` for every question, including follow-ups, with a precise query that reflects the current question in full context
+- For follow-up questions, include the specific topic from the prior turn in the tool query
+- Never answer from memory alone — always retrieve fresh context via tools
+- Use `summary_tool` only for broad document overviews, not specific questions
+- Explain concepts clearly using bullet points
+- Redirect off-topic questions back to the syllabus firmly
+- Maintain a formal, academic, yet encouraging tone
+- Always respond in English (Language Lock)
 
 ## 📝 Example Usage
 
 ```
-User: "Explain neural networks"
+User: "Explain mitosis"
 ↓
-Study Buddy: [Searches documents for neural network content]
+Agent: [Calls vector_tool("mitosis")] → retrieves relevant content
 ↓
-Response: "Neural networks are computational models inspired by biological neurons. 
-According to your lesson, they have the following characteristics:
-• Composed of interconnected nodes
-• Use activation functions for non-linearity
-• [Additional points from your documents...]"
+Response: "Mitosis is the process by which a cell divides into two identical daughter cells.
+According to your lesson:
+• Phase 1 — Prophase: chromosomes condense...
+• Phase 2 — Metaphase: chromosomes align...
+..."
+
+User: "What happens after that?"
+↓
+Agent: [Sees injected history → calls vector_tool("mitosis phases after metaphase")]
+↓
+Response: "Following metaphase, the next stages are..."
 ```
 
 ## 🔧 Technical Details
@@ -277,8 +303,10 @@ According to your lesson, they have the following characteristics:
 |---------|-------|
 | Primary Model | `gemini-1.5-flash` (Google GenAI) |
 | Fallback Model | `qwen3:4b` (Ollama local) |
-| Memory Limit | 4000 tokens |
+| Agent Type | `ReActAgent` |
+| Memory Limit | 4096 tokens |
 | Request Timeout (Ollama) | 150 seconds |
+| Summary Async | Disabled (`use_async=False`) |
 
 ### Embedding Model
 
@@ -297,20 +325,22 @@ According to your lesson, they have the following characteristics:
 | Splitter | SentenceSplitter |
 | Supported Formats | PDF, TXT, DOCX |
 | Vector Top-K | 5 |
+| Index Caching | By file name + size key |
+| Context Window (history) | Last 4 messages |
 
 ## 📊 Performance Considerations
 
-- **First Load**: Embedding model download and document indexing may take 1-2 minutes (cached in session)
+- **First Load**: Embedding model download and document indexing may take 1-2 minutes (cached for the rest of the session)
+- **File Change**: Uploading new files resets the index, memory, and chat history automatically
 - **Gemini**: Fast cloud inference, minimal local resource usage
 - **Ollama Fallback**: ~2GB RAM for Qwen3:4b; works on CPU without GPU
-- **Session Persistence**: Agent and memory survive Streamlit reruns for seamless interactions
-- **Scalability**: Suitable for documents up to several hundred pages
+- **Follow-up Questions**: Handled efficiently via the RAG Amnesia Fix without extra API calls
 
 ### Optimization Tips
 
-- Use your Google GenAI key for the fastest experience
+- Use your Google Gemini key for the fastest experience
 - For large documents, split into 20-30 page chunks for optimal performance
-- Subsequent chats are much faster due to caching after the first load
+- Subsequent questions in the same session are much faster due to index caching
 
 ## 🐛 Troubleshooting
 
@@ -328,6 +358,9 @@ ollama serve
 ```bash
 ollama pull qwen3:4b
 ```
+
+### Issue: Agent gives wrong answer to follow-up questions
+**Solution**: This is handled automatically by the RAG Amnesia Fix. If it persists, try rephrasing the follow-up with more context (e.g. *"what happens after mitosis metaphase?"* instead of *"what happens next?"*).
 
 ### Issue: Slow responses
 **Solution**:
@@ -357,7 +390,7 @@ This project was designed for students to enhance learning through:
 
 - Self-paced revision of lesson materials
 - Instant clarification of concepts
-- Interactive Q&A sessions
+- Interactive Q&A sessions with follow-up support
 - Document-grounded knowledge base
 
 ## ❓ FAQ
@@ -366,7 +399,7 @@ This project was designed for students to enhance learning through:
 A: Not when using Google Gemini. For local Ollama fallback, a GPU is optional — Qwen3:4b runs fine on CPU.
 
 **Q: Is there a cost to use this?**
-A: Google Gemini has a free tier that is sufficient for most student use. The embedding model always runs locally for free. Ollama is also fully free.
+A: Google Gemini has a free tier sufficient for most student use. The embedding model always runs locally for free. Ollama is also fully free.
 
 **Q: Can I use a different Gemini model?**
 A: Yes! Modify the `model_name` in the `GoogleGenAI(...)` call in `Study_Buddy.py`. See [Google AI Studio](https://aistudio.google.com/) for available models.
@@ -379,6 +412,9 @@ A: No — the system prompt explicitly restricts all responses to uploaded docum
 
 **Q: How is my data handled?**
 A: Document embedding always happens locally. If using Google Gemini, query text is sent to Google's API. If using Ollama, everything stays on your machine.
+
+**Q: Why does the agent rebuild on every question?**
+A: The index (the heavy part) is cached — only the lightweight agent wrapper rebuilds per query. This design avoids asyncio conflicts that occur when caching async agent objects across Streamlit reruns.
 
 ## 📧 Support
 

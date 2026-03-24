@@ -125,7 +125,8 @@ RULES:
 3. Explain concepts clearly using bullet points; do not just state bare facts.
 4. If a question is outside the scope of the uploaded documents, firmly remind the student 
    to stay focused on the syllabus.
-5. Maintain a formal, academic, yet encouraging tone throughout."""
+5. Maintain a formal, academic, yet encouraging tone throughout.
+6. LANGUAGE LOCK: You MUST respond in English. Even if you are using a multilingual model, do not switch to any other language."""
 
     # Keep memory in session state so it survives reruns
     if "agent_memory" not in st.session_state:
@@ -155,9 +156,6 @@ if uploaded_files:
         st.session_state.current_file_key = file_key
         st.session_state.agent_memory = ChatMemoryBuffer.from_defaults(token_limit=4096)
 
-    # Agent is rebuilt cleanly on the current thread's event loop
-    agent = build_agent(vector_index, summary_index, file_key)
-
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
@@ -170,29 +168,37 @@ if uploaded_files:
     if prompt := st.chat_input("Ask a question about your lessons..."):
         with st.chat_message("user"):
             st.markdown(prompt)
+
+        # --- RAG AMNESIA FIX ---
+        # Build conversation context from Streamlit history so the agent understands pronouns
+        chat_context = ""
+        if len(st.session_state.messages) > 0:
+            chat_context = "--- RECENT CONVERSATION HISTORY ---\n"
+            # Grab the last 4 messages to establish context
+            for msg in st.session_state.messages[-4:]:
+                role = "Student" if msg["role"] == "user" else "Tutor"
+                chat_context += f"{role}: {msg['content']}\n"
+            chat_context += "-----------------------------------\n\n"
+
+        # Combine history with the new questio
+        # Combine history with the new question
+        contextualized_prompt = f"{chat_context}Current Student Question: {prompt}\n\n(Note: Use history for context, but answer the Current Student Question ONLY in English.)"
+        # -----------------------
+
+        # Save the clean prompt to the UI history
         st.session_state.messages.append({"role": "user", "content": prompt})
 
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 
-                # 1. Wrap the run call so it doesn't execute until the loop is active
                 async def generate_response():
-                    return await agent.run(user_msg=prompt)
+                    agent = build_agent(vector_index, summary_index, file_key)
+                    # Feed the contextualized prompt to the agent instead of the raw prompt
+                    return await agent.run(user_msg=contextualized_prompt)
                 
-                # 2. Safely get the existing thread loop (prevents your first error)
-                try:
-                    loop = asyncio.get_event_loop()
-                except RuntimeError:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                
-                # 3. Run the wrapper cleanly
-                response = loop.run_until_complete(generate_response())
+                response = asyncio.run(generate_response())
                 
                 response_text = str(response)
                 st.markdown(response_text)
 
         st.session_state.messages.append({"role": "assistant", "content": response_text})
-
-else:
-    st.info("👆 Upload one or more lesson documents to get started!")

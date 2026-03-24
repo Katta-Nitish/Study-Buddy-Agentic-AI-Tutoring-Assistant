@@ -1,7 +1,8 @@
 import streamlit as st
-import time
 import os
 os.environ["STREAMLIT_GATHER_USAGE_STATS"] = "false"
+import nest_asyncio
+nest_asyncio.apply()  # Fix: prevents asyncio event loop conflicts in Streamlit
 import asyncio
 import tempfile
 from llama_index.llms.ollama import Ollama
@@ -16,117 +17,172 @@ from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from llama_index.core.memory import ChatMemoryBuffer
 
-# Create a header with your new logo
+# --- HEADER ---
 col_l, col_r = st.columns([2, 4])
-
 with col_l:
     try:
-        # Assuming you save the generated image as 'study_logo.png'
         st.image("study_logo.png", width=300)
     except:
-        st.write("📚") # Fallback emoji
-
+        st.write("📚")
 with col_r:
     st.title("Study Buddy")
-    st.caption("Ask your study buddy anything related to your lessons and it will answer without any delay and the answers are only from your documents so dont worry about the out of box answers😉")
-# --- SIDEBAR CONFIGURATION ---
+    st.caption("Ask your study buddy anything related to your lessons — answers come strictly from your uploaded documents 😉")
+
+# --- SIDEBAR ---
 with st.sidebar:
     st.title("📚 Study Buddy Settings")
-    # Priority: User Key > Secret Key > Local Ollama (for testing)
     user_key = st.text_input("Enter Gemini API Key (Optional)", type="password")
     st.info("Using a local embedding model: BGE-Small (No API cost for file reading)")
 
-# --- LLM SELECTION LOGIC ---
-if user_key:
-    # Use user provided key
-    llm = GoogleGenAI(api_key=user_key, model_name="models/gemini-1.5-flash")
-elif "GEMINI_API_KEY" in st.secrets:
-    # Use your secret key
-    llm = GoogleGenAI(api_key=st.secrets["GEMINI_API_KEY"], model_name="models/gemini-1.5-flash")
-else:
-    # Fallback to local Ollama for your Lenovo LOQ testing
-    llm = Ollama(model='qwen3:4b', request_timeout=150.0)
-
-Settings.llm = llm
-file=st.file_uploader(
-    "Upload your lesson document here (Note: only pdf,txt and docx type)",
-    type=['pdf','txt','docx'],
-    help="Only PDF, TXT, and DOCX files are allowed",
-    accept_multiple_files=True
-)
-Settings.llm=llm
-
+# --- EMBEDDING MODEL (cached so it loads only once) ---
 @st.cache_resource
 def load_embedding_model():
     return HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
 
-Settings.embed_model=load_embedding_model()
+Settings.embed_model = load_embedding_model()
 
-if file:
+# --- LLM SELECTION ---
+# Re-evaluated each run so key changes take effect immediately
+if user_key:
+    llm = GoogleGenAI(api_key=user_key, model_name="models/gemini-1.5-flash")
+elif "GEMINI_API_KEY" in st.secrets:
+    llm = GoogleGenAI(api_key=st.secrets["GEMINI_API_KEY"], model_name="models/gemini-1.5-flash")
+else:
+    llm = Ollama(model='qwen3:4b', request_timeout=150.0)
+
+Settings.llm = llm
+
+# --- FILE UPLOAD ---
+uploaded_files = st.file_uploader(
+    "Upload your lesson document here (PDF, TXT or DOCX only)",
+    type=['pdf', 'txt', 'docx'],
+    help="Only PDF, TXT, and DOCX files are allowed",
+    accept_multiple_files=True
+)
+
+# --- BUILD INDEX (cached by file names+sizes so it only rebuilds when files change) ---
+@st.cache_resource(show_spinner="Reading your documents...")
+def build_index(file_key: str, file_contents: list[bytes], file_names: list[str]):
+    """
+    Builds and returns (vector_index, summary_index).
+    Cached by a key derived from file names and sizes — rebuilds only when files change.
+    """
     with tempfile.TemporaryDirectory() as temp_dir:
-        file_paths=[]
-        for uploaded in file:
-            temp_file_path=os.path.join(temp_dir,uploaded.name)
-            with open(temp_file_path,"wb") as f:
-                f.write(uploaded.getvalue())
-            file_paths.append(temp_file_path)
-        document=SimpleDirectoryReader(input_files=file_paths).load_data()
-        splitter=SentenceSplitter(chunk_size=1024)
-        node=splitter.get_nodes_from_documents(document)
-        vector=VectorStoreIndex(node)
-        summary=SummaryIndex(node)
-    vector_query=vector.as_query_engine(
-        similarity_top_k=5  
-    )
-    summary_query=summary.as_query_engine(
+        file_paths = []
+        for name, content in zip(file_names, file_contents):
+            path = os.path.join(temp_dir, name)
+            with open(path, "wb") as f:
+                f.write(content)
+            file_paths.append(path)
+        documents = SimpleDirectoryReader(input_files=file_paths).load_data()
+
+    splitter = SentenceSplitter(chunk_size=1024)
+    nodes = splitter.get_nodes_from_documents(documents)
+    vector_index = VectorStoreIndex(nodes)
+    summary_index = SummaryIndex(nodes)
+    return vector_index, summary_index
+
+# --- BUILD AGENT (cached so memory persists across reruns) ---
+@st.cache_resource(show_spinner="Setting up your Study Buddy...")
+def build_agent(_vector_index, _summary_index, file_key: str):
+    """
+    Builds and caches the ReActAgent with its own persistent memory.
+    The leading underscore on index args tells Streamlit not to hash them.
+    Keyed by file_key so agent+memory reset when new files are uploaded.
+    """
+    vector_query = _vector_index.as_query_engine(similarity_top_k=5)
+    summary_query = _summary_index.as_query_engine(
         response_mode="tree_summarize",
         use_async=True
     )
-    vector_tool=QueryEngineTool(
+
+    vector_tool = QueryEngineTool(
         query_engine=vector_query,
         metadata=ToolMetadata(
             name="vector_tool",
-            description="Use this tool to find specific facts or details from the uploaded lessons."
+            description=(
+                "Use this tool to answer specific or follow-up questions about a particular topic, "
+                "concept, or detail from the uploaded lessons. Prefer this for focused questions."
+            )
         )
     )
-    summary_tool=QueryEngineTool(
+    summary_tool = QueryEngineTool(
         query_engine=summary_query,
         metadata=ToolMetadata(
             name="summary_tool",
-            description="Use this tool to summarize the lessons or answer broad questions about the entire document."
+            description=(
+                "Use this tool ONLY when the student asks for a broad overview or summary of the "
+                "entire document. Do NOT use this for specific or follow-up questions."
+            )
         )
     )
-    my_prompt ="""You are a rigorous but highly effective professor. 
-    Your job is to tutor a student using ONLY the provided lesson documents.
-    
-    RULES:
-    1. Base all your answers strictly on the retrieved document context from your tools.
-    2. Do not just hand out the simple answer; explain the underlying concepts clearly using bullet points.
-    3. If a question is outside the scope of the provided documents, sternly remind the student to stay focused on the syllabus.
-    4. Maintain a formal, academic, yet encouraging tone."""
 
-    
-    if "agent_moemory" not in st.session_state:
-        st.session_state.agent_memory=ChatMemoryBuffer.from_defaults(token_limit=4096)
-    agent=ReActAgent(
-        tools=[vector_tool,summary_tool],
-        memory=st.session_state.agent_memory,
-        system_prompt=my_prompt,
+    system_prompt = """You are a rigorous but highly effective professor tutoring a student.
+You must answer using ONLY the content retrieved from the provided lesson documents via your tools.
+
+RULES:
+1. For every question — including follow-up questions — you MUST call the vector_tool with a 
+   precise query that reflects exactly what the student is asking about right now.
+   - For follow-ups, include the specific topic from the prior turn in your tool query 
+     (e.g., if the student previously asked about "mitosis" and now asks "what happens next?", 
+     query the tool for "mitosis next steps" or "phases after mitosis").
+2. Never answer from memory alone — always retrieve fresh context from the tools.
+3. Explain concepts clearly using bullet points; do not just state bare facts.
+4. If a question is outside the scope of the uploaded documents, firmly remind the student 
+   to stay focused on the syllabus.
+5. Maintain a formal, academic, yet encouraging tone throughout."""
+
+    memory = ChatMemoryBuffer.from_defaults(token_limit=4096)
+
+    agent = ReActAgent(
+        tools=[vector_tool, summary_tool],
+        memory=memory,
+        system_prompt=system_prompt,
         verbose=True
     )
+    return agent
+
+
+# --- MAIN CHAT LOGIC ---
+if uploaded_files:
+    # Build a stable cache key from file names + sizes
+    file_key = "_".join(f"{f.name}-{len(f.getvalue())}" for f in uploaded_files)
+    file_contents = [f.getvalue() for f in uploaded_files]
+    file_names = [f.name for f in uploaded_files]
+
+    vector_index, summary_index = build_index(file_key, file_contents, file_names)
+    agent = build_agent(vector_index, summary_index, file_key)
+
+    # Reset chat display history when files change
+    if st.session_state.get("current_file_key") != file_key:
+        st.session_state.messages = []
+        st.session_state.current_file_key = file_key
+
     if "messages" not in st.session_state:
-        st.session_state.messages=[]
+        st.session_state.messages = []
+
+    # Render chat history
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
-    if prompt:=st.chat_input("user"):
+
+    # Handle new user input
+    if prompt := st.chat_input("Ask a question about your lessons..."):
         with st.chat_message("user"):
             st.markdown(prompt)
-        st.session_state.messages.append({"role":"user","content":prompt})
+        st.session_state.messages.append({"role": "user", "content": prompt})
+
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                async def answer(user_input):
-                    return await agent.run(user_msg=user_input)
-                response=asyncio.run(answer(prompt))
-                st.write(str(response))
-        st.session_state.messages.append({"role":"assistant","content":str(response)})
+                # Fix: use asyncio.run safely (nest_asyncio applied at top)
+                async def get_answer(user_input):
+                    return await agent.arun(user_msg=user_input)
+
+                response = asyncio.run(get_answer(prompt))
+                response_text = str(response)
+                st.markdown(response_text)
+
+        st.session_state.messages.append({"role": "assistant", "content": response_text})
+
+else:
+    st.info("👆 Upload one or more lesson documents to get started!")

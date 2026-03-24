@@ -176,7 +176,7 @@ if uploaded_files:
             with st.spinner("Thinking..."):
                 # Fix: use asyncio.run safely (nest_asyncio applied at top)
                 async def get_answer(user_input):
-                    return await agent.arun(user_msg=user_input)
+                    return await agent.run(user_msg=user_input)
 
                 response = asyncio.run(get_answer(prompt))
                 response_text = str(response)

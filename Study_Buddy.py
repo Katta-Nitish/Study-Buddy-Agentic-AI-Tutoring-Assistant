@@ -174,9 +174,20 @@ if uploaded_files:
 
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                # Use the existing loop safely to run the workflow
-                loop = asyncio.get_event_loop()
-                response = loop.run_until_complete(agent.run(user_msg=prompt))
+                
+                # 1. Wrap the run call so it doesn't execute until the loop is active
+                async def generate_response():
+                    return await agent.run(user_msg=prompt)
+                
+                # 2. Safely get the existing thread loop (prevents your first error)
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                
+                # 3. Run the wrapper cleanly
+                response = loop.run_until_complete(generate_response())
                 
                 response_text = str(response)
                 st.markdown(response_text)

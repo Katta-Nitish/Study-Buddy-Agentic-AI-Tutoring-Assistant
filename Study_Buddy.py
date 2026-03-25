@@ -3,9 +3,14 @@ import re
 import streamlit as st
 import os
 os.environ["STREAMLIT_GATHER_USAGE_STATS"] = "false"
-import nest_asyncio
-nest_asyncio.apply()  
 import asyncio
+import nest_asyncio
+
+# Force Python to use the standard asyncio event loop instead of uvloop
+asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+
+# Now it is safe to apply nest_asyncio
+nest_asyncio.apply()
 import tempfile
 from llama_index.llms.ollama import Ollama
 from llama_index.llms.google_genai import GoogleGenAI

@@ -96,23 +96,23 @@ def build_index(file_key: str, file_contents: list[bytes], file_names: list[str]
         documents = SimpleDirectoryReader(input_files=file_paths
                                           , file_extractor=file_extractor
                                           ).load_data()
+        splitter = SentenceSplitter(chunk_size=1024)
+        nodes = splitter.get_nodes_from_documents(documents)
+        client=chromadb.Client()
+        Collection=client.get_or_create_collection(name="Lessons")
+        doc_texts=[x.text for x in nodes]
+        ids = [f"chunk_{i}" for i in range(len(doc_texts))]
+        Collection.add(
+            documents=doc_texts,
+            ids=ids
+        )
+        vector_index = VectorStoreIndex(nodes)
+        summary_index = SummaryIndex(nodes)
+        return vector_index, summary_index,Collection
+    
     except Exception as e:
-        st.error(f"Error during file parsing: {str(e)}. Please provide your LlamaParse API key Since we are facing an issue integrating our api key(ifkey is already provided check your key and ensure your files are in the correct format.)")
+        st.error(f"Error processing files: {str(e)}, please provide valid files and if possible try by giving your llamaparser key(if already provided check your key and ensure your files are in the correct format.)")
         return None, None, None
-
-    splitter = SentenceSplitter(chunk_size=1024)
-    nodes = splitter.get_nodes_from_documents(documents)
-    client=chromadb.Client()
-    Collection=client.get_or_create_collection(name="Lessons")
-    doc_texts=[x.text for x in nodes]
-    ids = [f"chunk_{i}" for i in range(len(doc_texts))]
-    Collection.add(
-        documents=doc_texts,
-        ids=ids
-    )
-    vector_index = VectorStoreIndex(nodes)
-    summary_index = SummaryIndex(nodes)
-    return vector_index, summary_index,Collection
 
 
 option=st.selectbox("Select Weather ypu want an convernational agant or a question answer agent",["Conversational Agent(Note: Gemini API key required)","Question Answer Agent"])

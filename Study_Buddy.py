@@ -195,7 +195,7 @@ if st.session_state.option=="Conversational Agent(Note: Gemini API key required)
         file_contents = [f.getvalue() for f in uploaded_files]
         file_names = [f.name for f in uploaded_files]
 
-        vector_index, summary_index = build_index(file_key, file_contents, file_names)
+        vector_index, summary_index,collection = build_index(file_key, file_contents, file_names)
         
         # Reset chat and memory when files change
         if st.session_state.get("current_file_key") != file_key:

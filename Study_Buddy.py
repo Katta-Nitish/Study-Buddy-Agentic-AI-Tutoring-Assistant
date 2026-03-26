@@ -49,7 +49,7 @@ with col_r:
 with st.sidebar:
     st.title("📚 Study Buddy Settings")
     
-    user_key = st.text_input("Enter Gemini API Key (Optional)", type="password")
+    user_key = st.text_input("Enter Gemini API Key", type="password")
     st.caption("Get your free Gemini API key [here](https://aistudio.google.com/app/apikey) to enable the Conversational Agent.")
     st.info("Without a Gemini API key, you'll still get powerful answers based on your documents, but the agent won't be able to handle follow-up questions or maintain conversational context. For the best experience, we recommend using a Gemini API key.")
 

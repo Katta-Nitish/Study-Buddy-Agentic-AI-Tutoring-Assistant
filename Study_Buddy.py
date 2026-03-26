@@ -92,11 +92,11 @@ def build_index(file_key: str, file_contents: list[bytes], file_names: list[str]
                 result_type="markdown",
                 verbose=True
             )
-        file_extractor = {".pdf": parser}
-        documents = SimpleDirectoryReader(input_files=file_paths
-                                          , file_extractor=file_extractor
-                                          ).load_data()
-        splitter = SentenceSplitter(chunk_size=1024)
+            file_extractor = {".pdf": parser}
+            documents = SimpleDirectoryReader(input_files=file_paths
+                                            , file_extractor=file_extractor
+                                            ).load_data()
+            splitter = SentenceSplitter(chunk_size=1024)
         nodes = splitter.get_nodes_from_documents(documents)
         client=chromadb.Client()
         Collection=client.get_or_create_collection(name="Lessons")

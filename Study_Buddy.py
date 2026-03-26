@@ -92,12 +92,13 @@ def build_index(file_key: str, file_contents: list[bytes], file_names: list[str]
                 result_type="markdown",
                 verbose=True
             )
-    except:
-        st.error("Failed to initialize LlamaParse. Please provide your API key and try again (if you are seeing this error despite having one, check the key you provided).")
         file_extractor = {".pdf": parser}
         documents = SimpleDirectoryReader(input_files=file_paths
                                           , file_extractor=file_extractor
                                           ).load_data()
+    except Exception as e:
+        st.error(f"Error during file parsing: {str(e)}. Please provide your LlamaParse API key Since we are facing an issue integrating our api key(ifkey is already provided check your key and ensure your files are in the correct format.)")
+        return None, None, None
 
     splitter = SentenceSplitter(chunk_size=1024)
     nodes = splitter.get_nodes_from_documents(documents)

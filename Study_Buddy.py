@@ -79,18 +79,21 @@ def build_index(file_key: str, file_contents: list[bytes], file_names: list[str]
         LLAMA_PARSE_API_KEY = llama_parse_key
     else:
         LLAMA_PARSE_API_KEY = st.secrets["LLAMA_PARSE_API_KEY"]
-    with tempfile.TemporaryDirectory() as temp_dir:
-        file_paths = []
-        for name, content in zip(file_names, file_contents):
-            path = os.path.join(temp_dir, name)
-            with open(path, "wb") as f:
-                f.write(content)
-            file_paths.append(path)
-        parser = LlamaParse(
-            api_key=LLAMA_PARSE_API_KEY,
-            result_type="markdown",
-            verbose=True
-        )
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_paths = []
+            for name, content in zip(file_names, file_contents):
+                path = os.path.join(temp_dir, name)
+                with open(path, "wb") as f:
+                    f.write(content)
+                file_paths.append(path)
+            parser = LlamaParse(
+                api_key=LLAMA_PARSE_API_KEY,
+                result_type="markdown",
+                verbose=True
+            )
+    except:
+        st.error("Failed to initialize LlamaParse. Please provide your API key and try again (if you are seeing this error despite having one, check the key you provided).")
         file_extractor = {".pdf": parser}
         documents = SimpleDirectoryReader(input_files=file_paths
                                           , file_extractor=file_extractor

@@ -96,7 +96,7 @@ def build_index(file_key: str, file_contents: list[bytes], file_names: list[str]
             documents = SimpleDirectoryReader(input_files=file_paths
                                             , file_extractor=file_extractor
                                             ).load_data()
-            splitter = SentenceSplitter(chunk_size=1024)
+            splitter = SentenceSplitter(chunk_size=1024, chunk_overlap=200)
         nodes = splitter.get_nodes_from_documents(documents)
         client=chromadb.Client()
         clean_collection_name = re.sub(r'[^a-zA-Z0-9_-]', '', file_key)[:60]

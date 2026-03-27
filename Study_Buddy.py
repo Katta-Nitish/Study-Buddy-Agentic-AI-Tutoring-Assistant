@@ -99,7 +99,8 @@ def build_index(file_key: str, file_contents: list[bytes], file_names: list[str]
             splitter = SentenceSplitter(chunk_size=1024)
         nodes = splitter.get_nodes_from_documents(documents)
         client=chromadb.Client()
-        Collection=client.get_or_create_collection(name="Lessons")
+        clean_collection_name = re.sub(r'[^a-zA-Z0-9_-]', '', file_key)[:60]
+        Collection=client.get_or_create_collection(name=clean_collection_name)
         doc_texts=[x.text for x in nodes]
         ids = [f"chunk_{i}" for i in range(len(doc_texts))]
         Collection.add(

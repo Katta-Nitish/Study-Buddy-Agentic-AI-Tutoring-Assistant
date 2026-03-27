@@ -272,7 +272,7 @@ else:
             st.session_state.messages.append({"role":"user","content":prompt})
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
-                    response = collection.query(query_texts=[prompt], n_results=1)
+                    response = collection.query(query_texts=[prompt], n_results=3)
                     if response['documents'] and len(response['documents'][0]) > 0:
                         st.markdown("**Here is the most relevant information from your documents:**")
                         formatted_response = ""

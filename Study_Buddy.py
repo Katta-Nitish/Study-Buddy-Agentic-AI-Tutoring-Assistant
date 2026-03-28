@@ -12,7 +12,6 @@ asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
 # Now it is safe to apply nest_asyncio
 nest_asyncio.apply()
 import tempfile
-from llama_index.llms.ollama import Ollama
 from llama_index.llms.google_genai import GoogleGenAI
 from llama_index.core import Settings
 from llama_index.core import SimpleDirectoryReader

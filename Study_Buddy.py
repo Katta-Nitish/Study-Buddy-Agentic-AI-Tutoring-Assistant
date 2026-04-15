@@ -11,7 +11,7 @@ import re
 from pydoc import doc
 import re
 import streamlit as st
-from llama_index.core.llms import MockLLM
+#from llama_index.core.llms import MockLLM
 import os
 os.environ["STREAMLIT_GATHER_USAGE_STATS"] = "false"
 import asyncio
@@ -76,6 +76,7 @@ with st.sidebar:
 def load_embedding_model():
     return HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
 Settings.embed_model = load_embedding_model()
+Settings.llm = MockLLM()
 
 uploaded_files = st.file_uploader(
     "Upload your lesson document here (PDF, TXT or DOCX only)",

@@ -1,3 +1,13 @@
+# --- CRASH RESISTANCE FIX FOR CHROMADB ---
+import sys
+__import__('pysqlite3')
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+# ------------------------------------------
+
+from pydoc import doc
+import re
+# ... (rest of your imports)
+
 from pydoc import doc
 import re
 import streamlit as st
@@ -257,7 +267,6 @@ if st.session_state.option=="Conversational Agent(Note: Gemini API key required)
             st.session_state.messages.append({"role": "assistant", "content": response_text})
 else:
     if uploaded_files:
-        Settings.llm = None
         file_key = "_".join(f"{f.name}-{len(f.getvalue())}" for f in uploaded_files)
         file_contents = [f.getvalue() for f in uploaded_files]
         file_names = [f.name for f in uploaded_files]

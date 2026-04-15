@@ -1,6 +1,6 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.2.1
-transformers
+transformers<5.0.0
 safetensors
 streamlit==1.32.0
 llama-index-core

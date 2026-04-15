@@ -1,13 +1,7 @@
---extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.2.1
-transformers<5.0.0
-safetensors
-protobuf==3.20.3
-numpy==1.26.4
 streamlit==1.32.0
 llama-index-core
 llama-index-llms-google-genai
-llama-index-llms-openai
+llama-index-llms-openai  # Prevents the "package not found" error
 llama-index-embeddings-huggingface
 llama-index-readers-file
 sentence-transformers
@@ -15,3 +9,5 @@ nest-asyncio
 chromadb
 llama-parse
 docx2txt
+pysqlite3-binary  
+numpy<2.0.0              # Prevents the "Numpy is not available" Torch error

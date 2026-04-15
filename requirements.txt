@@ -1,16 +1,15 @@
+numpy==1.26.4
 --extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.2.1
+torch>=2.1.0
 transformers<5.0.0
-safetensors
+sentence-transformers
 protobuf==3.20.3
-numpy==1.24.1
-streamlit==1.32.0
+streamlit>=1.35.0
 llama-index-core
 llama-index-llms-google-genai
 llama-index-embeddings-huggingface
 llama-index-readers-file
-sentence-transformers
 nest-asyncio
-chromadb
+chromadb>=0.5.0
 llama-parse
 docx2txt

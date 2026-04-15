@@ -104,7 +104,7 @@ def build_index(file_key: str, file_contents: list[bytes], file_names: list[str]
         ids = [f"chunk_{i}" for i in range(len(doc_texts))]
         Collection.add(
             documents=doc_texts,
-            ids=ids
+            ids=ids,
             embeddings=[[0.0] * 384 for _ in doc_texts]
         )
         vector_index = VectorStoreIndex(nodes)

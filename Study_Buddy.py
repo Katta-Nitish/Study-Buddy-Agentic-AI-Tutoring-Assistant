@@ -11,6 +11,7 @@ import re
 from pydoc import doc
 import re
 import streamlit as st
+from llama_index.core.llms import MockLLM
 import os
 os.environ["STREAMLIT_GATHER_USAGE_STATS"] = "false"
 import asyncio
@@ -267,6 +268,7 @@ if st.session_state.option=="Conversational Agent(Note: Gemini API key required)
             st.session_state.messages.append({"role": "assistant", "content": response_text})
 else:
     if uploaded_files:
+        Settings.llm = MockLLM()
         file_key = "_".join(f"{f.name}-{len(f.getvalue())}" for f in uploaded_files)
         file_contents = [f.getvalue() for f in uploaded_files]
         file_names = [f.name for f in uploaded_files]

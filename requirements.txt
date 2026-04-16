@@ -1,7 +1,7 @@
 streamlit==1.32.0
 llama-index-core
 llama-index-llms-google-genai
-llama-index-llms-openai  # Prevents the "package not found" error
+llama-index-llms-openai
 llama-index-embeddings-huggingface
 llama-index-readers-file
 sentence-transformers
@@ -9,5 +9,5 @@ nest-asyncio
 chromadb
 llama-parse
 docx2txt
-pysqlite3-binary  
-numpy<2.0.0              # Prevents the "Numpy is not available" Torch error
+pysqlite3-binary
+numpy<2.0.0

@@ -1,5 +1,5 @@
 streamlit==1.32.0
-llama-index-core
+llama-index-core<0.13.0
 llama-index-llms-google-genai
 llama-index-llms-openai
 llama-index-embeddings-huggingface

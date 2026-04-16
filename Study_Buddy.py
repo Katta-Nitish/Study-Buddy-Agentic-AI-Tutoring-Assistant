@@ -252,17 +252,17 @@ if st.session_state.option=="Conversational Agent(Note: Gemini API key required)
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
                     
-                    async def generate_response():
+                    def generate_response():
                         try:
                             agent = build_agent(vector_index, summary_index, file_key)
-                            response = await agent.chat(contextualized_prompt)
+                            response = agent.chat(contextualized_prompt)
                             return response.response
                         except Exception as e:
                             if "429" in str(e):
                                 return "⏳ **Whoops! I'm thinking a little too fast.** The Google Gemini API has reached its free-tier rate limit (too many requests in one minute). Please wait about 60 seconds and try asking your question again!"
                             else:
                                 return f"⚠️ **An unexpected error occurred:** {str(e)}"
-                    response = asyncio.run(generate_response())
+                    response = generate_response()
                     
                     response_text = str(response)
                     st.markdown(response_text)

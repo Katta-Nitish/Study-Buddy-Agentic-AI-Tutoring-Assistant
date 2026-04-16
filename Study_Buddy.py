@@ -255,7 +255,7 @@ if st.session_state.option=="Conversational Agent(Note: Gemini API key required)
                     async def generate_response():
                         try:
                             agent = build_agent(vector_index, summary_index, file_key)
-                            response = await agent.achat(contextualized_prompt)
+                            response = await agent.chat(contextualized_prompt)
                             return response.response
                         except Exception as e:
                             if "429" in str(e):

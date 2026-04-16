@@ -198,7 +198,7 @@ if st.session_state.option=="Conversational Agent(Note: Gemini API key required)
             tools=[vector_tool, summary_tool],
             llm=Settings.llm,
             memory=st.session_state.agent_memory,
-            system_prompt=system_prompt,
+            context=system_prompt,
             verbose=True
         )
         return agent

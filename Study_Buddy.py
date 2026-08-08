@@ -20,6 +20,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 import streamlit as st
 from langgraph.graph import StateGraph, START,END
 from typing import TypedDict,Dict, Annotated
+from langchain_core.output_parsers import StrOutputParser
 
 class State(TypedDict):
     input: str
@@ -49,6 +50,8 @@ uploaded_file=st.file_uploader(
     accept_multiple_files=False
 )
  
+
+
 if "retriever" not in st.session_state:
     if uploaded_file:
         with st.spinner("Processing Documents..."):
@@ -76,6 +79,7 @@ def embed(state: State):
         final=[doc.page_content for doc in res]
         return {"embedding": final}
 
+
 def agent_builder(state: State):
     start_time = time.time()
     llm=ChatOllama(model="deepseek-r1:8b",temperature=0.2, keep_alive=False)
@@ -95,6 +99,8 @@ def agent_builder(state: State):
     response = chain.invoke({"messages": state['messages'], "context": context})
     latency = time.time() - start_time
     return {"first_response": response, "latency": latency}
+
+
 
 def evaluate_response(state: State):
     llm=LangchainLLMWrapper(ChatOllama(model="gemma3:12b",temperature=0, format="json", timeout=600))
@@ -135,6 +141,7 @@ def evaluate_response(state: State):
 
     return {"scores": result, "history": history}
 
+
 def response_evaluation(state: State):
     score = state['scores']['answer_relevancy']
     attempt = state.get("attempt", 1)
@@ -150,6 +157,8 @@ def response_evaluation(state: State):
     else:
         return {"action": "stop"}
     return {"top_k":new_k, "attempt":attempt+1, "action":"retry"}
+
+
     
 def get_graph():
     builder=StateGraph(State)
@@ -176,54 +185,34 @@ graph=get_graph()
 
 if "messages" not in st.session_state:
     st.session_state.messages=[]
-    
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message['content'])
-        
-if input := st.chat_input("Ask a question about the uploaded documents"):
+if input:=st.chat_input("Ask a question about the uploaded documents"):
     with st.chat_message("user"):
         st.markdown(input)
-        
-    # 1. Sync Streamlit UI history with LangGraph message history
-    conversation_history = []
-    for msg in st.session_state.messages:
-        if msg["role"] == "user":
-            conversation_history.append(HumanMessage(content=msg["content"]))
-        else:
-            conversation_history.append(AIMessage(content=msg["content"]))
-            
-    # Append the current question
-    conversation_history.append(HumanMessage(content=input))
-    
-    # Update Streamlit UI state
-    st.session_state.messages.append({"role": "user", "content": input})
-    
+    st.session_state.messages.append({"role":"user","content":input})
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
             start = time.time()
-            
-            # 2. Generate a unique thread ID for THIS specific question
-            current_thread_id = str(time.time())
-            
-            response = graph.invoke({
+            response=graph.invoke({
                 "input": input,
-                "messages": conversation_history,
+                "messages": [HumanMessage(content=input)],
                 "attempt": 1,
                 "max_attempts": 3,
-                "top_k": 5,
-                "history": [] # 3. Explicitly reset the evaluation history
+                "top_k": 5
             },
-            config={
-                "configurable": {
-                    "thread_id": current_thread_id
+            config=
+                {
+                    "configurable":
+                    {
+                        "thread_id": str(time.time()) # <--- Replaced st.session_state.thread_id here
+                    }
                 }
-            })
-            
+            )
             total_latency = time.time() - start
             final_answer = response.get("first_response")
             history = response.get("history", [])
-            
             if len(history) > 1:
                 st.markdown("✔ Improved using adaptive retrieval")
             st.markdown(final_answer)
@@ -237,8 +226,8 @@ if input := st.chat_input("Ask a question about the uploaded documents"):
                 if len(history) >= 2:
                     first = history[0]["relevance"]
                     last = history[-1]["relevance"]
+
                     st.write("Improvement:", first, "→", last)
-                    
                 with st.expander("Full History"):
                     for h in history:
                         st.write(
@@ -249,4 +238,4 @@ if input := st.chat_input("Ask a question about the uploaded documents"):
                             f"Latency={h['latency']:.2f}s"
                         )
 
-            st.session_state.messages.append({"role": "assistant", "content": final_answer})
+            st.session_state.messages.append({"role":"assistant","content":final_answer})

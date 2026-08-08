@@ -10,4 +10,7 @@ chromadb
 llama-parse
 docx2txt
 pysqlite3-binary
+langchain
+langchain-community
+pypdf
 numpy<2.0.0

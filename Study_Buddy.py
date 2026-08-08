@@ -4,11 +4,6 @@ __import__('pysqlite3')
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 # ------------------------------------------
 
-
-from pydoc import doc
-import re
-# ... (rest of your imports)
-
 from pydoc import doc
 import re
 import streamlit as st
@@ -85,6 +80,7 @@ uploaded_files = st.file_uploader(
     help="Only PDF, TXT, and DOCX files are allowed",
     accept_multiple_files=True
 )
+
 @st.cache_resource(show_spinner="Reading your documents...")
 def build_index(file_key: str, file_contents: list[bytes], file_names: list[str]):
     if llama_parse_key:
@@ -105,15 +101,23 @@ def build_index(file_key: str, file_contents: list[bytes], file_names: list[str]
                 verbose=True
             )
             file_extractor = {".pdf": parser}
-            documents = SimpleDirectoryReader(input_files=file_paths
-                                            , file_extractor=file_extractor
-                                            ).load_data()
+            documents = SimpleDirectoryReader(
+                input_files=file_paths,
+                file_extractor=file_extractor
+            ).load_data()
             splitter = SentenceSplitter(chunk_size=1024, chunk_overlap=200)
         nodes = splitter.get_nodes_from_documents(documents)
-        client=chromadb.Client()
+        client = chromadb.Client()
         clean_collection_name = re.sub(r'[^a-zA-Z0-9_-]', '', file_key)[:60]
-        Collection=client.get_or_create_collection(name=clean_collection_name)
-        doc_texts=[x.text for x in nodes]
+        
+        # Reset collection if it already exists to avoid leftover chunks
+        try:
+            client.delete_collection(name=clean_collection_name)
+        except Exception:
+            pass
+            
+        Collection = client.get_or_create_collection(name=clean_collection_name)
+        doc_texts = [x.text for x in nodes]
         ids = [f"chunk_{i}" for i in range(len(doc_texts))]
         Collection.add(
             documents=doc_texts,
@@ -122,24 +126,26 @@ def build_index(file_key: str, file_contents: list[bytes], file_names: list[str]
         )
         vector_index = VectorStoreIndex(nodes)
         summary_index = SummaryIndex(nodes)
-        return vector_index, summary_index,Collection
+        return vector_index, summary_index, Collection
     
     except Exception as e:
         st.error(f"Error processing files: {str(e)}, please provide valid files and if possible try by giving your llamaparser key(if already provided check your key and ensure your files are in the correct format.)")
         return None, None, None
 
 
-option=st.selectbox("Select Weather ypu want an convernational agant or a question answer agent",["Conversational Agent(Note: Gemini API key required)","Question Answer Agent"])
-st.session_state.option=option
+option = st.selectbox(
+    "Select Weather ypu want an convernational agant or a question answer agent",
+    ["Conversational Agent(Note: Gemini API key required)", "Question Answer Agent"]
+)
+st.session_state.option = option
 
-if st.session_state.option=="Conversational Agent(Note: Gemini API key required)":
+if st.session_state.option == "Conversational Agent(Note: Gemini API key required)":
     st.info("The Conversational Agent mode allows for follow-up questions and a more interactive tutoring experience. It uses the Google Gemini API, so an API key is required. If you don't have one, you can still use the Question Answer Agent mode without an API key.")
 
     # --- LLM SELECTION ---
     if user_key:
         llm = GoogleGenAI(api_key=user_key, model_name="models/gemini-1.5-flash")
         Settings.llm = llm
-
 
     # --- BUILD AGENT (No longer cached!) ---
     def build_agent(vector_index, summary_index, file_key: str):
@@ -203,16 +209,15 @@ if st.session_state.option=="Conversational Agent(Note: Gemini API key required)
         )
         return agent
 
-
     if uploaded_files:
         # Build a stable cache key from file names + sizes
         file_key = "_".join(f"{f.name}-{len(f.getvalue())}" for f in uploaded_files)
         file_contents = [f.getvalue() for f in uploaded_files]
         file_names = [f.name for f in uploaded_files]
 
-        vector_index, summary_index,collection = build_index(file_key, file_contents, file_names)
+        vector_index, summary_index, collection = build_index(file_key, file_contents, file_names)
         
-        # Reset chat and memory when files change
+        # Reset chat and memory when files change to prevent cross-document memory leak
         if st.session_state.get("current_file_key") != file_key:
             st.session_state.messages = []
             st.session_state.current_file_key = file_key
@@ -264,15 +269,20 @@ else:
         file_names = [f.name for f in uploaded_files]
         vector_index, summary_index, collection = build_index(file_key, file_contents, file_names)
 
+        # Reset chat when files change in Question Answer Agent mode
+        if st.session_state.get("current_file_key") != file_key:
+            st.session_state.messages = []
+            st.session_state.current_file_key = file_key
+
         if "messages" not in st.session_state:
-            st.session_state.messages=[]
+            st.session_state.messages = []
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
-        if prompt:= st.chat_input("Ask a question about your lessons..."):
+        if prompt := st.chat_input("Ask a question about your lessons..."):
             with st.chat_message("user"):
                 st.markdown(prompt)
-            st.session_state.messages.append({"role":"user","content":prompt})
+            st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
                     response = collection.query(query_texts=[prompt], n_results=3)
@@ -331,4 +341,4 @@ else:
                         st.write_stream(stream_text(formatted_response))
                     else:
                         formatted_response = "I couldn't find any relevant information in the uploaded documents."
-                st.session_state.messages.append({"role":"assistant","content":formatted_response})
+                st.session_state.messages.append({"role": "assistant", "content": formatted_response})
